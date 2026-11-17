@@ -16,7 +16,11 @@ use Symfony\Component\Mime\MessageConverter;
  */
 class CommonMailerTransport extends AbstractTransport
 {
-    public function __construct(private CommonMailerClient $client, private ?string $defaultProfile = null)
+    /**
+     * @param  array{profile?: string|null}  $options  "profile": the profile handle used when the
+     *                                                 email does not choose one (X-Mailer-Profile)
+     */
+    public function __construct(private CommonMailerClient $client, private array $options = [])
     {
         parent::__construct();
     }
@@ -27,6 +31,28 @@ class CommonMailerTransport extends AbstractTransport
     }
 
     /**
+     * Get the transport options.
+     *
+     * @return array{profile?: string|null}
+     */
+    public function getOptions(): array
+    {
+        return $this->options;
+    }
+
+    /**
+     * Set the transport options.
+     *
+     * @param  array{profile?: string|null}  $options
+     */
+    public function setOptions(array $options): static
+    {
+        $this->options = $options;
+
+        return $this;
+    }
+
+    /**
      * @throws CommonMailerException
      */
     protected function doSend(SentMessage $message): void
@@ -34,7 +60,7 @@ class CommonMailerTransport extends AbstractTransport
         $email = MessageConverter::toEmail($message->getOriginalMessage());
 
         $queued = $this->client->send(
-            MessagePayload::fromEmail($email, $this->defaultProfile),
+            MessagePayload::fromEmail($email, $this->options['profile'] ?? null),
             MessagePayload::idempotencyKey($email) ?? (string) Str::uuid(),
         );
 

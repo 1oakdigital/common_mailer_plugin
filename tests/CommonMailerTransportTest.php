@@ -8,6 +8,7 @@ use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use OneOakDigital\CommonMailer\Exceptions\CommonMailerException;
+use OneOakDigital\CommonMailer\Transport\CommonMailerTransport;
 
 class CommonMailerTransportTest extends TestCase
 {
@@ -77,6 +78,35 @@ class CommonMailerTransportTest extends TestCase
         Mail::mailer('newsletter')->raw('Hi', fn (Message $message) => $message->from('a@example.com')->to('b@example.com')->subject('S'));
 
         Http::assertSent(fn (Request $request): bool => 'newsletter' === $request['profile']);
+    }
+
+    public function test_a_mailer_may_set_its_profile_in_options_like_the_ses_transport(): void
+    {
+        $this->app['config']->set('mail.mailers.signup', [
+            'transport' => 'common-mailer',
+            'profile' => 'ignored',
+            'options' => ['profile' => 'signup'],
+        ]);
+        Http::fake(['mailer.test/*' => Http::response($this->queuedResponse(), 202)]);
+
+        $transport = Mail::mailer('signup')->getSymfonyTransport();
+        $this->assertInstanceOf(CommonMailerTransport::class, $transport);
+        $this->assertSame(['profile' => 'signup'], $transport->getOptions());
+
+        Mail::mailer('signup')->raw('Hi', fn (Message $message) => $message->from('a@example.com')->to('b@example.com')->subject('S'));
+
+        Http::assertSent(fn (Request $request): bool => 'signup' === $request['profile']);
+    }
+
+    public function test_the_x_mailer_profile_header_wins_over_the_options_profile(): void
+    {
+        $this->app['config']->set('mail.mailers.signup', ['transport' => 'common-mailer', 'options' => ['profile' => 'signup']]);
+        Http::fake(['mailer.test/*' => Http::response($this->queuedResponse(), 202)]);
+
+        Mail::mailer('signup')->raw('Hi', fn (Message $message) => $message->from('a@example.com')->to('b@example.com')->subject('S')
+            ->getHeaders()->addTextHeader('X-Mailer-Profile', 'notify'));
+
+        Http::assertSent(fn (Request $request): bool => 'notify' === $request['profile']);
     }
 
     public function test_attachments_are_sent_base64_encoded(): void

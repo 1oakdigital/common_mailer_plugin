@@ -44,12 +44,19 @@ class CommonMailerServiceProvider extends ServiceProvider
             $manager->extend(self::TRANSPORT, function (array $mailerConfig): CommonMailerTransport {
                 $config = array_merge(
                     (array) $this->app['config']->get('common-mailer'),
-                    Arr::except($mailerConfig, ['transport']),
+                    Arr::except($mailerConfig, ['transport', 'options']),
+                );
+
+                // Like the ses transport's "options": the mailer's options
+                // win over its own keys and config/common-mailer.php.
+                $options = array_merge(
+                    ['profile' => $config['profile'] ?? null],
+                    (array) ($mailerConfig['options'] ?? []),
                 );
 
                 return new CommonMailerTransport(
                     new CommonMailerClient($this->app->make(Factory::class), $config),
-                    $config['profile'] ?? null,
+                    $options,
                 );
             });
         });

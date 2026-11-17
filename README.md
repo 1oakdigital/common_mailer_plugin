@@ -17,13 +17,17 @@ The service provider is auto-discovered. Add a mailer to `config/mail.php`:
     'common-mailer' => [
         'transport' => 'common-mailer',
     ],
-    // optional: more mailers on other profiles
-    'newsletter' => [
+    // optional: more mailers on other profiles, set like the ses transport's options
+    'common-mailer-signup' => [
         'transport' => 'common-mailer',
-        'profile' => 'newsletter',
+        'options' => [
+            'profile' => 'signup',
+        ],
     ],
 ],
 ```
+
+Then `Mail::mailer('common-mailer-signup')->send(...)`, or `MAIL_MAILER=common-mailer-signup`.
 
 And set in `.env`:
 
@@ -45,6 +49,10 @@ COMMON_MAILER_PROFILE=signup
 | `retry_sleep_ms`                 | `COMMON_MAILER_RETRY_SLEEP_MS` | 200     | Pause between attempts. |
 
 Any key may also be set on a mailer in `config/mail.php`; it wins over `config/common-mailer.php`.
+The profile is chosen in this order: the email's `X-Mailer-Profile` header, the mailer's
+`options.profile`, the mailer's `profile`, then `COMMON_MAILER_PROFILE`. The transport's options can be
+read and changed like the ses transport's: `Mail::mailer('common-mailer')->getSymfonyTransport()->getOptions()`
+/ `setOptions(['profile' => 'notify'])`.
 Publish the config file with `php artisan vendor:publish --tag=common-mailer-config`.
 
 ## Choosing the profile and the idempotency key per email
@@ -53,7 +61,7 @@ Two headers control the request and are not sent on with the email:
 
 | Header                     | Effect |
 |----------------------------|--------|
-| `X-Mailer-Profile`         | Profile handle for this email (otherwise the mailer's / the config's `profile`). |
+| `X-Mailer-Profile`         | Profile handle for this email (otherwise the mailer's `options.profile` / `profile`, then the config's `profile`). |
 | `X-Mailer-Idempotency-Key` | `Idempotency-Key` of the request (otherwise a random UUID per send). |
 
 ```php
