@@ -6,11 +6,15 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Mail\MailManager;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use OneOakDigital\CommonMailer\Http\Actions\ReceiveFeedbackAction;
+use OneOakDigital\CommonMailer\Http\Middleware\VerifyFeedbackSignature;
 use OneOakDigital\CommonMailer\Transport\CommonMailerTransport;
 
 /**
- * Registers the "common-mailer" mail transport and CommonMailerClient.
+ * Registers the "common-mailer" mail transport, CommonMailerClient and the
+ * route receiving the mailer's feedback.
  */
 class CommonMailerServiceProvider extends ServiceProvider
 {
@@ -18,6 +22,11 @@ class CommonMailerServiceProvider extends ServiceProvider
      * Name of the transport in config/mail.php ("transport" => "common-mailer").
      */
     public const string TRANSPORT = 'common-mailer';
+
+    /**
+     * Name of the feedback route.
+     */
+    public const string FEEDBACK_ROUTE = 'common-mailer.feedback';
 
     public function register(): void
     {
@@ -40,6 +49,8 @@ class CommonMailerServiceProvider extends ServiceProvider
             ], 'common-mailer-config');
         }
 
+        $this->registerFeedbackRoute();
+
         $this->callAfterResolving('mail.manager', function (MailManager $manager): void {
             $manager->extend(self::TRANSPORT, function (array $mailerConfig): CommonMailerTransport {
                 $config = array_merge(
@@ -60,5 +71,23 @@ class CommonMailerServiceProvider extends ServiceProvider
                 );
             });
         });
+    }
+
+    /**
+     * POST common-mailer.feedback.path, unless feedback is disabled or the
+     * routes are cached.
+     */
+    private function registerFeedbackRoute(): void
+    {
+        $config = (array) $this->app['config']->get('common-mailer.feedback');
+
+        if ( ! ($config['enabled'] ?? false) || $this->app->routesAreCached()) {
+            return;
+        }
+
+        Route::post((string) $config['path'])
+            ->middleware([...(array) ($config['middleware'] ?? []), VerifyFeedbackSignature::class])
+            ->uses([ReceiveFeedbackAction::class, 'handle'])
+            ->name(self::FEEDBACK_ROUTE);
     }
 }
