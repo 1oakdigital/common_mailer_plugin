@@ -55,13 +55,14 @@ read and changed like the ses transport's: `Mail::mailer('common-mailer')->getSy
 / `setOptions(['profile' => 'notify'])`.
 Publish the config file with `php artisan vendor:publish --tag=common-mailer-config`.
 
-## Choosing the profile and the idempotency key per email
+## Choosing the profile, priority and idempotency key per email
 
-Two headers control the request and are not sent on with the email:
+These headers control the request and are not sent on with the email:
 
 | Header                     | Effect |
 |----------------------------|--------|
 | `X-Mailer-Profile`         | Profile handle for this email (otherwise the mailer's `options.profile` / `profile`, then the config's `profile`). |
+| `X-Mailer-Priority`        | `1` (most urgent) ... `5`: the email's priority, i.e. its queue in the mailer and whether rate limits may hold it back (otherwise the profile's `default_priority`; a mailer automation can still change it). Anything else is refused. |
 | `X-Mailer-Idempotency-Key` | `Idempotency-Key` of the request (otherwise a random UUID per send). |
 
 ```php
@@ -71,6 +72,7 @@ public function headers(): Headers
 {
     return new Headers(text: [
         'X-Mailer-Profile' => 'signup',
+        'X-Mailer-Priority' => '1',
         'X-Mailer-Idempotency-Key' => "welcome-{$this->user->id}",
     ]);
 }
