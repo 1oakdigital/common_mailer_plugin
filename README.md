@@ -119,6 +119,57 @@ The transport maps the Symfony email to the API and refuses, before any request,
   email), a `CommonMailerException` is thrown; `status()` is the HTTP status and `errors()` the `422`
   validation errors by field.
 
+## Feedback from the mailer
+
+The mailer tells the site about its recipients by POSTing to `https://<site domain>/api/v1/mailer/feedback`. The
+plugin registers that route (`common-mailer.feedback`), checks the request is signed with the site's
+`COMMON_MAILER_TOKEN` and dispatches a Laravel event:
+
+| Feedback event            | Laravel event                                                          |
+|---------------------------|------------------------------------------------------------------------|
+| `recipient_undeliverable` | `OneOakDigital\CommonMailer\Events\MailerRecipientUndeliverableEvent` |
+
+`MailerRecipientUndeliverableEvent`: the mailer will not send to the address any more. Properties: `email`,
+`reason` (`EMailerUndeliverableReason`: `DoesNotExist`, `SuppressionList`, `AccountSuppressionList`, `Complained`,
+`RepeatedBounces`, `Unknown` for a reason newer than the plugin), `rawReason`, `occurredAt`, `feedbackId` (the same
+when the mailer retries, so a listener can skip repeats).
+
+```php
+use OneOakDigital\CommonMailer\Events\MailerRecipientUndeliverableEvent;
+
+class WhenMailerRecipientUndeliverableListener
+{
+    public function handle(MailerRecipientUndeliverableEvent $event): void
+    {
+        User::query()->where('email', $event->email)->update(['mail_enabled' => 0]);
+    }
+}
+```
+
+| Key                   | Env                                | Default                  |
+|-----------------------|------------------------------------|--------------------------|
+| `feedback.enabled`    | `COMMON_MAILER_FEEDBACK_ENABLED`   | `true`                   |
+| `feedback.path`       | `COMMON_MAILER_FEEDBACK_PATH`      | `api/v1/mailer/feedback` |
+| `feedback.middleware` | -                                  | `[]` (before the check)  |
+| `feedback.tolerance`  | `COMMON_MAILER_FEEDBACK_TOLERANCE` | `300` seconds            |
+
+Request:
+
+```
+POST /api/v1/mailer/feedback
+Content-Type: application/json
+X-Mailer-Signature: t=1763550000,v1=<hex>[,v1=<hex>...]
+
+{"id": "<uuid>", "event": "recipient_undeliverable", "occurred_at": "2026-11-19T10:00:00+00:00",
+ "data": {"email": "jan@gmail.com", "reason": "does_not_exist"}}
+```
+
+`v1 = hash_hmac('sha256', "<t>.<raw body>", hash('sha256', <token>))`: the mailer stores only that hash of the
+token and signs with it, one `v1` per token of the site; the token itself never travels
+(`OneOakDigital\CommonMailer\Feedback\FeedbackSignature`). Answers: `202` `{"status": "accepted"}`, or
+`{"status": "ignored"}` for an event this version does not know (the mailer does not retry it); `401` for a missing,
+wrong or older than `tolerance` signature (and when no token is configured); `422` for invalid data.
+
 ## Development
 
 ```bash

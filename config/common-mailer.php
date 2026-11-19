@@ -48,4 +48,25 @@ return [
 
     'retry_sleep_ms' => (int) env('COMMON_MAILER_RETRY_SLEEP_MS', 200),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Feedback from the mailer
+    |--------------------------------------------------------------------------
+    |
+    | The mailer POSTs feedback (e.g. a recipient became undeliverable) to
+    | https://<site domain>/<path>, signed with the token above (see
+    | FeedbackSignature); each one is dispatched as a Laravel event, e.g.
+    | MailerRecipientUndeliverableEvent. "tolerance" is how far, in seconds,
+    | the signature's time may be from now. "middleware" is added before the
+    | signature check (none needed: no session, no CSRF).
+    |
+    */
+
+    'feedback' => [
+        'enabled' => (bool) env('COMMON_MAILER_FEEDBACK_ENABLED', true),
+        'path' => env('COMMON_MAILER_FEEDBACK_PATH', 'api/v1/mailer/feedback'),
+        'middleware' => [],
+        'tolerance' => (int) env('COMMON_MAILER_FEEDBACK_TOLERANCE', 300),
+    ],
+
 ];
