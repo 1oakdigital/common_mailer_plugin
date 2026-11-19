@@ -22,6 +22,12 @@ class MessagePayload
     public const string PROFILE_HEADER = 'X-Mailer-Profile';
 
     /**
+     * Sets the priority of one email, 1 (most urgent) ... 5, instead of its
+     * profile's default; not sent on as a header.
+     */
+    public const string PRIORITY_HEADER = 'X-Mailer-Priority';
+
+    /**
      * Sets the Idempotency-Key of one email; not sent on as a header.
      */
     public const string IDEMPOTENCY_KEY_HEADER = 'X-Mailer-Idempotency-Key';
@@ -40,11 +46,12 @@ class MessagePayload
     ];
 
     /**
-     * X-* headers that are never sent on: the two above and the mailer's own
+     * X-* headers that are never sent on: the three above and the mailer's own
      * X-Mailer-Id, which matches bounces to emails.
      */
     private const array RESERVED_HEADERS = [
         'x-mailer-profile',
+        'x-mailer-priority',
         'x-mailer-idempotency-key',
         'x-mailer-id',
     ];
@@ -54,6 +61,7 @@ class MessagePayload
      *
      * @return array{
      *     profile: string,
+     *     priority?: int,
      *     from: array{address: string, name?: string},
      *     to: array{address: string, name?: string},
      *     reply_to?: array{address: string, name?: string},
@@ -68,11 +76,16 @@ class MessagePayload
      */
     public static function fromEmail(Email $email, ?string $defaultProfile): array
     {
-        $payload = [
-            'profile' => self::profile($email, $defaultProfile),
-            'from' => self::address(self::single($email->getFrom(), 'From', required: true)),
-            'to' => self::address(self::recipient($email)),
-        ];
+        $payload = ['profile' => self::profile($email, $defaultProfile)];
+
+        $priority = self::priority($email);
+
+        if (null !== $priority) {
+            $payload['priority'] = $priority;
+        }
+
+        $payload['from'] = self::address(self::single($email->getFrom(), 'From', required: true));
+        $payload['to'] = self::address(self::recipient($email));
 
         $replyTo = self::single($email->getReplyTo(), 'Reply-To', required: false);
 
@@ -136,6 +149,26 @@ class MessagePayload
         }
 
         return $profile;
+    }
+
+    /**
+     * The X-Mailer-Priority header, or null to use the profile's priority.
+     *
+     * @throws CommonMailerException
+     */
+    private static function priority(Email $email): ?int
+    {
+        $priority = mb_trim((string) $email->getHeaders()->get(self::PRIORITY_HEADER)?->getBodyAsString());
+
+        if ('' === $priority) {
+            return null;
+        }
+
+        if (1 !== preg_match('/^[1-5]$/', $priority)) {
+            throw CommonMailerException::unsupported('the ' . self::PRIORITY_HEADER . " header must be 1 (most urgent) to 5, \"{$priority}\" given.");
+        }
+
+        return (int) $priority;
     }
 
     /**

@@ -70,6 +70,41 @@ class CommonMailerTransportTest extends TestCase
             && ! isset($request['headers']));
     }
 
+    public function test_the_x_mailer_priority_header_sets_the_priority_and_is_not_sent_on(): void
+    {
+        Http::fake(['mailer.test/*' => Http::response($this->queuedResponse(), 202)]);
+
+        Mail::raw('Hi', function (Message $message): void {
+            $message->from('a@example.com')->to('b@example.com')->subject('S');
+            $message->getHeaders()->addTextHeader('X-Mailer-Priority', '4');
+        });
+
+        Http::assertSent(fn (Request $request): bool => 4 === $request['priority']
+            && ! isset($request['headers']));
+    }
+
+    public function test_without_the_x_mailer_priority_header_no_priority_is_sent(): void
+    {
+        Http::fake(['mailer.test/*' => Http::response($this->queuedResponse(), 202)]);
+
+        Mail::raw('Hi', fn (Message $message) => $message->from('a@example.com')->to('b@example.com')->subject('S'));
+
+        Http::assertSent(fn (Request $request): bool => ! array_key_exists('priority', $request->data()));
+    }
+
+    public function test_an_invalid_x_mailer_priority_header_is_refused(): void
+    {
+        Http::fake();
+
+        $this->expectException(CommonMailerException::class);
+        $this->expectExceptionMessage('X-Mailer-Priority header must be 1 (most urgent) to 5, "6" given');
+
+        Mail::raw('Hi', function (Message $message): void {
+            $message->from('a@example.com')->to('b@example.com')->subject('S');
+            $message->getHeaders()->addTextHeader('X-Mailer-Priority', '6');
+        });
+    }
+
     public function test_a_mailer_may_set_its_own_profile(): void
     {
         $this->app['config']->set('mail.mailers.newsletter', ['transport' => 'common-mailer', 'profile' => 'newsletter']);
